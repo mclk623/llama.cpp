@@ -44,6 +44,8 @@ jobs:
           - cuda: '12.4'
             arch: x64
             defines: '-DGGML_CUDA_CUB_3DOT2=ON'
+          - cuda: '13.3'
+            arch: x64
 
     steps:
       - name: Clone
