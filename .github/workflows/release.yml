@@ -129,7 +129,7 @@ jobs:
             -DGGML_HIP=ON `
             -DGPU_TARGETS="gfx1011" `
             -DGGML_RPC=ON
-           cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
+           cmake --build build --config Release --parallel ${env:NUMBER_OF_PROCESSORS} 
 
 
       - name: Get ROCm short version
