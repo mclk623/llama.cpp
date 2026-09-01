@@ -68,46 +68,41 @@ jobs:
         run: |
           choco install ninja
           
-      - name: Setup ROCm
-        # if: steps.cache-rocm.outputs.cache-hit != 'true'
-        uses: ./.github/actions/windows-setup-rocm
-        with:
-          version: ${{ matrix.ROCM_VERSION }}
-
-      - name: Setup ROCm Environment
+      - name: Download and extract TheRock gfx101X tarball
         run: |
           $ErrorActionPreference = "Stop"
+          mkdir D:\therock-gfx101x
+          cd D:\therock-gfx101x
+          
+          curl -o therock.tar.gz https://therock-nightly-tarball.s3.amazonaws.com/therock-dist-windows-gfx101X-dgpu-7.14.0a20260612.tar.gz
+          
+          tar -xzf therock.tar.gz
+          
+          if (-not (Test-Path "install\bin\rocblas.dll")) {
+            throw "rocblas.dll not found in tarball"
+          }
+          if (-not (Test-Path "install\.kpack\blas_lib_gfx1011.kpack")) {
+            throw "gfx1011 blas kpack not found in tarball"
+          }
+          
+          Write-Host "TheRock tarball extracted successfully"
+          Get-ChildItem install\.kpack\
 
-          # Activate venv from cache or fresh install
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-
-          # Expand the devel tree (idempotent; no-op if already done during install)
-          rocm-sdk init
-          if ($LASTEXITCODE -ne 0) { throw "rocm-sdk init failed with exit code $LASTEXITCODE" }
-
-          # Get ROCm installation paths using the rocm-sdk CLI tool
-          $rocmPath = (rocm-sdk path --root)
-          if (-not $rocmPath) { throw "rocm-sdk path --root returned empty - devel package may not be installed" }
-          $rocmPath = $rocmPath.Trim()
-          $cmakePath = (rocm-sdk path --cmake).Trim()
-          $binPath = (rocm-sdk path --bin).Trim()
-          write-host "ROCm root: $rocmPath"
-
-          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
-          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
-          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
-          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
-          echo "$binPath" >> $env:GITHUB_PATH
-
-          # Keep venv in PATH for subsequent steps
-          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
-
-      - name: Verify ROCm
-        id: verify
+      - name: Setup TheRock Environment
         run: |
-          # Test the ROCm clang shipped in the installed wheel
-          & "${env:HIP_PATH}\lib\llvm\bin\clang.exe" --version
+          $therockPath = "D:\therock-gfx101x\install"
+          
+          echo "HIP_PATH=$therockPath" >> $env:GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$therockPath" >> $env:GITHUB_ENV
+          echo "HIP_DEVICE_LIB_PATH=$therockPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
+          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
+          echo "LLVM_PATH=$therockPath\lib\llvm" >> $env:GITHUB_ENV
+          echo "$therockPath\bin" >> $env:GITHUB_PATH
+
+      - name: Verify TheRock compiler
+        run: |
+          & "D:\therock-gfx101x\install\bin\clang.exe" --version
+          & "D:\therock-gfx101x\install\bin\rocminfo.exe"
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
