@@ -78,19 +78,15 @@ jobs:
           
           tar -xzf therock.tar.gz
           
-          if (-not (Test-Path "install\bin\rocblas.dll")) {
+          if (-not (Test-Path "bin\rocblas.dll")) {
             throw "rocblas.dll not found in tarball"
-          }
-          if (-not (Test-Path "install\.kpack\blas_lib_gfx1011.kpack")) {
-            throw "gfx1011 blas kpack not found in tarball"
           }
           
           Write-Host "TheRock tarball extracted successfully"
-          Get-ChildItem install\.kpack\
 
       - name: Setup TheRock Environment
         run: |
-          $therockPath = "D:\therock-gfx101x\install"
+          $therockPath = "D:\therock-gfx101x"
           
           echo "HIP_PATH=$therockPath" >> $env:GITHUB_ENV
           echo "CMAKE_PREFIX_PATH=$therockPath" >> $env:GITHUB_ENV
