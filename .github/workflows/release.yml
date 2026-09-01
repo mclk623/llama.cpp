@@ -120,6 +120,7 @@ jobs:
             -DGGML_NATIVE=OFF `
             -DGGML_CPU=ON `
             -DGGML_HIP=ON `
+            -DGGML_HIP_ROCWMMA_FATTN=ON `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\lib\llvm\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\lib\llvm\bin\clang++.exe" `
             -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" `
