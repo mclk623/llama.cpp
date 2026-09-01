@@ -98,7 +98,6 @@ jobs:
       - name: Verify TheRock compiler
         run: |
           & "${env:HIP_PATH}\lib\llvm\bin\clang.exe" --version
-          & "${env:HIP_PATH}\bin\hipinfo.exe"
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
