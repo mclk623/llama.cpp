@@ -63,11 +63,16 @@ jobs:
       #     path: C:\TheRock\build
       #     key: rocm-wheels-${{ env.ROCM_VERSION }}-multi-arch-${{ runner.os }}
 
+
+      - name: Install Ninja
+        run: |
+          choco install ninja
+          
       - name: Setup ROCm
         # if: steps.cache-rocm.outputs.cache-hit != 'true'
         uses: ./.github/actions/windows-setup-rocm
         with:
-          version: ${{ env.ROCM_VERSION }}
+          version: ${{ matrix.ROCM_VERSION }}
 
       - name: Setup ROCm Environment
         run: |
@@ -118,18 +123,68 @@ jobs:
       - name: Build
         id: cmake_build
         run: |
-          cmake -G "Unix Makefiles" -B build -S . `
+          cmake -S . -B build `
+            -G "Ninja Multi-Config" `
             -DCMAKE_PREFIX_PATH="${env:HIP_PATH}" `
+            -DGGML_BACKEND_DL=ON `
+            -DGGML_NATIVE=OFF `
+            -DGGML_CPU=OFF `
+            -DGGML_HIP=ON `
             -DCMAKE_C_COMPILER="${env:HIP_PATH}\lib\llvm\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="${env:HIP_PATH}\lib\llvm\bin\clang++.exe" `
+            -DCMAKE_C_FLAGS="-Wno-error=incompatible-pointer-types" `
             -DCMAKE_HIP_COMPILER="${env:HIP_PATH}\lib\llvm\bin\clang.exe" `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DLLAMA_BUILD_BORINGSSL=ON `
             -DHIP_PATH="${env:HIP_PATH}" `
-            -DGGML_HIP=ON `
-            -DGPU_TARGETS="gfx1011" `
-            -DGGML_RPC=ON
-           cmake --build build --config Release --parallel ${env:NUMBER_OF_PROCESSORS} 
+            -DAMDGPU_TARGETS="${{ matrix.gpu_targets }}"
+          cmake --build build --config Release --parallel ${env:NUMBER_OF_PROCESSORS}
+
+      - name: Verify HIP backend was built
+        run: |
+          $hipDll = Get-ChildItem -Path build\bin\Release -Filter "ggml-hip*.dll" -ErrorAction SilentlyContinue
+          if (-not $hipDll) {
+            Write-Host "##[error]ggml-hip*.dll was NOT produced. The HIP backend silently failed to build."
+            Write-Host "Contents of build\bin\Release:"
+            Get-ChildItem build\bin\Release | Format-Table -AutoSize
+            exit 1
+          }
+          Write-Host "HIP backend artifact found:"
+          $hipDll | Format-Table FullName, Length -AutoSize
+
+      - name: Determine tag name
+        id: tag
+        uses: ./.github/actions/get-tag-name
+
+      - name: Get ROCm short version
+        run: |
+          $rocmVersionShort = ('${{ matrix.ROCM_VERSION }}'.Split('.')[0..1] -join '.')
+          echo "ROCM_VERSION_SHORT=$rocmVersionShort" >> $env:GITHUB_ENV
+
+      - name: Bundle HIP runtime DLLs (amdhip64_7.dll, rocm_kpack.dll, amd_comgr.dll)
+        run: |
+          $ErrorActionPreference = "Stop"
+          # See issue https://github.com/ggml-org/llama.cpp/issues/26929.
+          # ggml-hip.dll loads amdhip64_7.dll at run time. The Adrenalin driver
+          # ships an amdhip64_7.dll in System32, which the loader searches before PATH,
+          # so a matching DLL from PATH cannot win. Copy amdhip64 next to the
+          # binaries (exe directory is searched before System32) so the correct
+          # runtime is used. rocm_kpack.dll is amdhip64_7's direct dependency, so
+          # copy the matching version too. amd_comgr is copied as well to keep it
+          # in sync with the bundled amdhip64, avoiding a version mismatch with a
+          # amd_comgr from System32.
+          # rocblas/hipblaslt kernels resolve fine via PATH and are not copied.
+          $binPath = (rocm-sdk path --bin).Trim()
+          if (-not $binPath) { throw "rocm-sdk path --bin returned empty" }
+          write-host "ROCm bin path: $binPath"
+
+          $patterns = @("amdhip64_7.dll", "rocm_kpack.dll", "amd_comgr.dll")
+          foreach ($pattern in $patterns) {
+            $files = Get-ChildItem -Path $binPath -Filter $pattern -ErrorAction SilentlyContinue
+            if (-not $files) { throw "no match for $pattern in $binPath" }
+            foreach ($f in $files) {
+              Copy-Item $f.FullName -Destination build\bin\Release -Force
+              write-host "  copied $($f.Name)"
+            }
+          }
 
 
       - name: Get ROCm short version
